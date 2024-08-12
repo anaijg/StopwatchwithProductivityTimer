@@ -1,0 +1,25 @@
+<div class="step-text">
+<p></p>
+<p>You've been given the following code with questionable naming conventions.</p>
+<pre><code class="language-kotlin">interface foo {
+    fun printMessage()
+}
+
+class bar(val x: String) : foo {
+    override fun printMessage() {
+        print(x)
+    }
+}
+
+class baz(base: foo) : foo by base {
+    override fun printMessage() {
+        print("Hello Kotlin")
+    }
+}
+
+fun main() {
+    val b = bar("Hello Delegate")
+    baz(b).printMessage()
+}</code></pre>
+<p>Can you identify all of these elements?</p>
+</div>

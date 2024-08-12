@@ -1,0 +1,141 @@
+<div class="step-text">
+<p>Most programming involves reusing already existing code, sometimes with a few changes. In object-oriented programming (which is the case of Kotlin), for example, the main tool for code reusage is inheritance (and composition, consequently), which we've already covered. In this topic, we will discuss an alternative to inheritance – <strong>delegation</strong>. </p>
+<h5 id="syntax-of-delegation">Syntax of delegation</h5>
+<p>Delegation is a process of using a certain object instead of providing implementation, and we're going to take a look at how exactly it works.</p>
+<p>Suppose we have fairly simple code – an interface and it's implementation:</p>
+<pre><code class="language-kotlin">interface MyInterface {
+    fun print()
+    val msg: String
+}
+
+class MyImplementation : MyInterface {
+    override fun print() {
+        println(msg)
+    }
+
+    override val msg: String = "MyImplementation sends regards!"
+}
+</code></pre>
+<p>Nothing new here: the interface declares a property and a function, and the class implements those.</p>
+<p>Now, suppose that we need to create a new class, which would 1) have some functionality of its own, and 2) would implement the given interface at the same time. We'd stumble upon copy-pasting the code: we already have an implementation of this interface, but we need a different class, which, however, would still need to implement this interface.</p>
+<p>That's where delegation comes into play: it turns out that we can happily code our new class, and when we need to use the implementation of the interface, we just reference the already existing implementation, and Kotlin does the rest. Like so:</p>
+<pre><code class="language-kotlin">class MyNewClass(base: MyInterface) : MyInterface by base {  
+    override val msg = "Delegate sends regards."  
+}</code></pre>
+<p>Alright, but what are those "by" and "base" in this context? Let's take a closer look.</p>
+<pre><code class="language-kotlin">class MyNewClass(  
+        base: MyInterface) 
+        // ^ Here we expect an implementation of MyInterface as a parameter (named "base")  
+        : MyInterface by base { 
+        // ^ And here we state that MyInterface is implemented by the previously obtained parameter, the one named "base"  
+    override val msg = "Delegate sends regards."  
+}</code></pre>
+<p>Essentially, in the constructor of this class, we require something that implements the interface <code class="language-kotlin">MyInterface</code> marked by a colon (<code class="language-kotlin">:</code>), and then, using the keyword <code class="language-kotlin">by</code>, we tell the derived class that whenever it is asked to perform anything "promised" by the <code class="language-kotlin">MyInterface</code> interface, it will use the provided object to do so. </p>
+<p>The code looks like this:</p>
+<pre><code class="language-kotlin">// We create an instance of class, implementing MyInterface
+val delegate = MyImplementation()  
+
+// Then we pass this implementation instance as a parameter
+val delegatingObj = MyNewClass(delegate)  
+println(delegatingObj.msg)
+</code></pre>
+<p>It will print:</p>
+<pre><code class="language-kotlin">Delegate sends regards.
+</code></pre>
+<h5 id="solving-complications-by-overriding">Solving complications by overriding</h5>
+<p>However, what exactly will this code do?</p>
+<pre><code class="language-kotlin">val delegate = MyImplementation()
+val delegatingObj = MyNewClass(delegate)
+
+delegatingObj.print()</code></pre>
+<p>Notice that in the previous example, we accessed the <code class="language-kotlin">msg</code> property that the delegating class <code class="language-kotlin">MyNewClass</code> specifically overrides. Now that we access the method <code class="language-kotlin">print()</code> that we don't override in <code class="language-kotlin">MyNewClass</code>, what do you think the code will print?</p>
+<p>Take some time to muse on the answer, then keep reading.</p>
+<p>This code will print the following line:</p>
+<p><code class="language-kotlin">MyImplementation sends regards!</code></p>
+<p>Let's look at our class with delegation again:</p>
+<pre><code class="language-kotlin">class MyNewClass(base: MyInterface) : MyInterface by base {  
+    override val msg = "Delegate sends regards."  
+}
+</code></pre>
+<p>It doesn't have any methods named <code class="language-kotlin">print()</code>. But it does have the <code class="language-kotlin">base</code> <a class="theory-lookup not-relevant" href="/learn/step/21405" rel="noopener noreferrer nofollow" target="_blank" title="In Kotlin, an instance refers to an object or an instance of a class that is created during runtime. | It is a subtype of every known type in Kotlin, meaning it can represent a value of any type in terms of type checking. This is particularly useful in situations where a function demands a return type, but it is impossible to return a value, such as when calculating a percentage if the value is zero. In such cases, a function that returns `Instance` can be used. The concept of instance is also related to threading, where only one thread can execute code in a synchronized method of a particular instance. This means that different threads can execute methods of different objects at the same time, a concept that can be summarized as one thread per instance.">instance</a>, which is an implementation of <code class="language-kotlin">MyInterface</code>, which does have the <code class="language-kotlin">print()</code> function, and that function is called when we write <code class="language-kotlin">delegate.print()</code>. So, the class <code class="language-kotlin">MyNewClass</code> just <strong>delegates</strong> this task to <code class="language-kotlin">MyImplementation</code> (the delegate). <code class="language-kotlin">MyImplementation</code> contains an overridden <code class="language-kotlin">msg</code>, which reads <code class="language-kotlin">MyImplementation sends regards!</code>, so the code just prints <code class="language-kotlin">MyImplementation sends regards!</code> to the console.</p>
+<p>When you use delegation, be careful to draw a line between the overridden properties/methods of the delegating class and the ones which will use only the base implementation and its data.</p>
+<h5 id="callback-and-logger-example">Callback and Logger example</h5>
+<p>In the example above, we mainly used delegation to override some properties set by the interface and do something simple. Let's take a look at a more complex case featuring not one but two delegates!</p>
+<div class="alert alert-warning"><p>This example is twice as complicated as what we've had before, so no worries if it looks unclear – once you develop a better intuitive feeling for the structure of delegate, it will make more sense.</p></div>
+<p style="text-align: start;">First, let's understand the two interfaces we're going to use:</p>
+<ul><li><p><code class="language-kotlin">ICallbackReceiver</code>: This interface outlines the structure for callbacks. It's used in the case when we need to "surround" a certain action with function calls doing something before (<code class="language-kotlin">onBeforeAction()</code>) and after (<code class="language-kotlin">onAfterAction()</code>) the execution of a function (<code class="language-kotlin">action()</code>).</p></li><li><p><code class="language-kotlin">ILogger</code>: This interface is simply a formatter for output. However, when used in delegation, it makes all output follow the same pattern, which can be useful for logging.</p></li></ul>
+<p style="text-align: start;">Here's how these interfaces look in code:</p>
+<pre><code class="language-kotlin">// Defines the contract for callbacks
+interface ICallbackReceiver {
+    fun onBeforeAction()
+    fun onAfterAction()
+    fun action(function: () -&gt; Unit) {
+        onBeforeAction()
+        function()
+        onAfterAction()
+    }
+}
+
+// Defines the contract for logging
+interface ILogger {
+    fun getStubDateTime() = "05.11.2022-14:31:04" // placeholder date and time
+
+    val format: String
+        get() = "[${getStubDateTime()}]: "
+
+    fun print(s: String)
+}
+</code></pre>
+<p style="text-align: start;">Now, let's provide an implementation for these interfaces:</p>
+<ul><li><p><code class="language-kotlin">BasicLogger</code>: A simple implementation of the <code class="language-kotlin">ILogger</code> interface. It prints the formatted output to the console.</p></li><li><p><code class="language-kotlin">ConsoleNotifier</code>: It implements two interfaces:</p><ul><li><p><code class="language-kotlin">ICallbackReceiver</code> interface, while defining the actions to be performed before and after the main action.</p></li><li><p><code class="language-kotlin">ILogger</code>, that <code class="language-kotlin">BasicLogger</code> object will delegate to it for printing messages to the console instead of the usual <code class="language-kotlin">println()</code>.</p></li></ul></li></ul>
+<p style="text-align: start;">Here's what they look like in code:</p>
+<pre><code class="language-kotlin">// Simple implementation of ILogger interface
+class BasicLogger : ILogger {
+    override fun print(s: String) = println(format + s)
+}
+
+// Implementation of ICallbackReceiver that uses BasicLogger for printing
+class ConsoleNotifier(logger: ILogger) : ICallbackReceiver, ILogger by logger {
+    val onBeforeStr = "OnBefore!"
+    val onAfterStr = "OnAfter!"
+
+    // "print" is delegated to "logger"
+    override fun onBeforeAction() = print(onBeforeStr)
+    override fun onAfterAction() = print(onAfterStr)
+}
+</code></pre>
+<p style="text-align: start;">Finally, we'll create a class, <code class="language-kotlin">ExampleParser</code>, that implements both interfaces using delegation. Notice that the <code class="language-kotlin">ExampleParser</code> class doesn’t need to know how to handle callbacks or print messages itself, it just delegates those responsibilities to other objects that know how to do it.</p>
+<pre><code class="language-kotlin">// Class implementing both interfaces by delegation
+class ExampleParser(notifier: ConsoleNotifier, logger: BasicLogger) :
+    ICallbackReceiver by notifier,
+    ILogger by logger {
+
+    fun start() = action { parseFiles() }
+
+    fun parseFiles() {
+        print("Parsing...")
+        // do some file parsing
+    }
+}</code></pre>
+<p style="text-align: start;">Keep in mind that there is another way of specifying the constructors of <code class="language-kotlin">ExampleParser</code> class, so that it becomes more flexible and expects any implementation of the <code class="language-kotlin">ICallbackReceiver</code> and <code class="language-kotlin">ILogger</code> interfaces. This means you could pass any object that implements these interfaces, not just <code class="language-kotlin">ConsoleNotifier</code> and <code class="language-kotlin">BasicLogger</code>. This allows for more flexibility and is generally a better practice as it follows the principle of "programming to an interface, not an implementation", which is a key principle in object-oriented programming.</p>
+<p style="text-align: start;">This is the better version of <code class="language-kotlin">ExampleParser</code>:</p>
+<pre><code class="language-kotlin">class ExampleParser(notifier: ICallbackReceiver, logger: ILogger) :
+    ICallbackReceiver by notifier,
+    ILogger by logger {
+    ...
+}</code></pre>
+<p style="text-align: start;">Now, when you run the following code, instances of <code class="language-kotlin">BasicLogger</code> and <code class="language-kotlin">ConsoleNotifier</code> will be created. These instances will then be passed to the constructor of <code class="language-kotlin">ExampleParser</code>. When the <code class="language-kotlin">start()</code> function of <code class="language-kotlin">ExampleParser</code> is called, it will print messages using the format defined in <code class="language-kotlin">BasicLogger</code>, and it will also call the functions defined in <code class="language-kotlin">ConsoleNotifier</code> before and after parsing files.</p>
+<pre><code class="language-kotlin">fun main() {
+    val loggerInstance = BasicLogger()
+    val dateTimeNotifier = ConsoleNotifier(loggerInstance)
+
+    val simpleParser = ExampleParser(dateTimeNotifier, loggerInstance)
+    simpleParser.start()
+}</code></pre>
+<p style="text-align: start;">Here's what the output will look like:</p>
+<pre><code class="language-kotlin">[05.11.2022-14:31:04]: OnBefore!
+[05.11.2022-14:31:04]: Parsing...
+[05.11.2022-14:31:04]: OnAfter!</code></pre>
+<h5 id="conclusion">Conclusion</h5>
+<p>Delegation allows for a better code reusage, or rather makes it more convenient due to Kotlin's good language-level support of delegation. Instead of writing code to achieve certain functionality inside the class (potentially copying this code from already existing implementations), we can introduce an object that already has the functionality we need and use this object to get the desirable result. </p>
+</div>
